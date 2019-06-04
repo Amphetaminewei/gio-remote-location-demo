@@ -2,8 +2,8 @@
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 
-// 7 15 22 29下午
 static void async_ready_cb(GObject *object, GAsyncResult *res, GtkBuilder *builder) {
+	g_message ("async_ready_cb");
 	GFile *file = G_FILE (object);
 	GError *err = NULL;
 	g_file_mount_enclosing_volume_finish (file, res, &err);
@@ -49,6 +49,77 @@ static void async_ready_cb(GObject *object, GAsyncResult *res, GtkBuilder *build
 	}
 }
 
+static void
+ask_question_cb (GMountOperation *op,
+                 char *message,
+                 char **choices,
+                 GtkBuilder* builder)
+{
+  char **ptr = choices;
+  char *s;
+  int i, choice;
+
+  g_print ("%s\n", message);
+
+  i = 1;
+  while (*ptr)
+    {
+      g_print ("[%d] %s\n", i, *ptr++);
+      i++;
+    }
+
+	g_mount_operation_set_choice (op, 0);
+	g_mount_operation_reply (op, G_MOUNT_OPERATION_HANDLED);
+}
+
+static void
+ask_password_cb (GMountOperation *op,
+                 const char      *message,
+                 const char      *default_user,
+                 const char      *default_domain,
+                 GAskPasswordFlags flags, GtkBuilder *builder) 
+{
+	g_message ("ask_password_cb");
+
+	GtkEntry *username_entry = GTK_ENTRY (gtk_builder_get_object (builder, "username_entry"));
+	GtkEntry *pwd_entry = GTK_ENTRY (gtk_builder_get_object (builder, "pwd_entry"));
+	const char* user  = gtk_entry_get_text (username_entry);
+	const char* pwd  = gtk_entry_get_text (pwd_entry);
+
+	g_message ("msg: %s\n", message);
+	if (default_user) {
+		g_message ("user: %s", default_user);
+	}
+	if (default_domain) {
+		g_message ("domain: %s", default_domain);
+	}
+
+    if (flags & G_ASK_PASSWORD_NEED_USERNAME)
+	{
+		g_message ("need username");
+		g_mount_operation_set_username (op, user);
+    }
+
+	if (flags & G_ASK_PASSWORD_NEED_PASSWORD)
+	{
+		g_message ("need pwd");
+		g_mount_operation_set_password (op, pwd);
+    }
+	
+	if (flags & G_ASK_PASSWORD_NEED_DOMAIN) {
+		g_message ("need domain");
+	}
+
+	g_mount_operation_reply (op, G_MOUNT_OPERATION_HANDLED);
+}
+
+static void
+aborted_cb (GMountOperation *op,
+                 GtkBuilder *builder)
+{
+	g_message ("aborted_cb");
+}
+
 static void login_bt_cb (GtkWidget *button, GtkBuilder *builder) {
 	GtkEntry *host_entry = GTK_ENTRY (gtk_builder_get_object (builder, "host_entry"));
 	GtkEntry *username_entry = GTK_ENTRY (gtk_builder_get_object (builder, "username_entry"));
@@ -68,6 +139,10 @@ static void login_bt_cb (GtkWidget *button, GtkBuilder *builder) {
 			NULL,
 			(GAsyncReadyCallback) async_ready_cb,
 			builder);
+
+	g_signal_connect (mount_op, "ask-question", G_CALLBACK(ask_question_cb), builder);
+	g_signal_connect (mount_op, "ask-password", G_CALLBACK (ask_password_cb), builder);
+	g_signal_connect (mount_op, "aborted", G_CALLBACK (aborted_cb), builder);
 }
 
 static void reset_bt_cb (GtkWidget *button, GtkBuilder *builder) {
